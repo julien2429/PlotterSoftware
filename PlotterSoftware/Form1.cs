@@ -28,10 +28,10 @@ namespace PlotterSoftware
 
         private const float FEED_RATE_INPUT = 100;
         private const float FEED_RATE_DIAGONAL = 141.421f;
-        private const float Z_FEED_RATE_INPUT = 50;
+        private const float Z_FEED_RATE_INPUT = 75;
         private const float DISTANCE_XY = 0.025F;
         private const float DISTANCE_XY_DIAGONAL = 0.017F;
-        private const float DISTANCE_Z = 0.2F;
+        private const float DISTANCE_Z = 0.025F;
         private const float CIRCLE_INCREMENT = 0.025F;
         
 
@@ -546,7 +546,7 @@ namespace PlotterSoftware
             _moveZDown =true;
             Task.Run( async () =>
             {
-                string command = GenerateMovementCommand(false,  false, true, 0, 0, -DISTANCE_Z, FEED_RATE_INPUT);
+                string command = GenerateMovementCommand(false,  false, true, 0, 0, -DISTANCE_Z, Z_FEED_RATE_INPUT);
 
                 while (_moveZDown)
                 {
@@ -655,9 +655,18 @@ namespace PlotterSoftware
 
 
             await sendCommand("G21");
-            //await sendCommand("G92 X0 Y0 Z0"); // SETS THE ORIGIN TO 0 0 0
             await sendCommand("G91");
-            await sendCommand("G1 Z-1 F500");
+            //await sendCommand("G1 Z-1 F500");
+
+            //lift pen
+            var liftPen = GenerateMovementCommand(false, false, true, 0, 0, -DISTANCE_Z, Z_FEED_RATE_INPUT);
+
+            for(int i=0; i < 10; i++)
+            {
+                await sendCommand(liftPen);
+            }
+
+
 
             var newLine = new Line();
 
@@ -670,49 +679,153 @@ namespace PlotterSoftware
                 await sendCommand(l);
             }
 
-            await sendCommand("G1 Z1 F500");
+            //lower pen
+            var lowerPen = GenerateMovementCommand(false, false, true, 0, 0, DISTANCE_Z, Z_FEED_RATE_INPUT);
+            for (int i = 0; i < 10; i++)
+            {
+                await sendCommand(lowerPen);
+            }
+
+            //await sendCommand("G1 Z1 F500");
         }
 
         private List< (float, float) > GetFirstEigthQuadrant(int r)
         {
 
-            int x = r, y = 0;
-
-            int P = 1 - r;
+            int x = 0, y = r;
+            int d = 3 - 2 * r;
 
             List<(float, float)> commands =  new List<(float, float)>();
 
-            
-            while (x > y)
+            while (y >= x)
             {
-                y++;
-                float y_val = 1.0f;
-                float x_val = 0.0f;
-                if(P <= 0)
+
+                if (d > 0)
                 {
-                    P = P + 2 * y + 1;
+                    y--;
+                    d = d + 4 * (x - y) + 10;
+                    commands.Add((0, -1.0f / 5));
                 }
                 else
-                {
-                    x--;
-                    x_val = -1;
-                    P = P + 2 * y - 2 * x + 1;
-                }
+                    d = d + 4 * x + 6;
 
-                if (x < y)
-                    break;
+              
+                x++;
+                commands.Add((1.0f/5, 0));
 
-                commands.Add((x_val / 5.0f, y_val / 5.0f));
-               
             }
 
-            return commands;    
+
+                /*while (x > y)
+                {
+                    y++;
+                    float y_val = 1.0f;
+                    float x_val = 0.0f;
+
+                    if(P <= 0)
+                    {
+                        P = P + 2 * y + 1;
+                    }
+                    else
+                    {
+                        x--;
+                        x_val = -1;
+                        P = P + 2 * y - 2 * x + 1;
+                    }
+
+                    if (x < y)
+                        break;
+                    commands.Add((0, y_val / 5));
+                    commands.Add((x_val / 5, 0));
+                    // commands.Add((x_val / 5.0f, y_val / 5.0f));
+
+                }*/
+
+                return commands;    
 
 
         }
 
-
         private async void DrawCircle(int radius)
+        {
+
+            await sendCommand("G21");
+            await sendCommand("G91");
+            //await sendCommand("G1 Z-1 F500");
+
+            //lift pen
+            var liftPen = GenerateMovementCommand(false, false, true, 0, 0, -DISTANCE_Z, Z_FEED_RATE_INPUT);
+
+            for (int i = 0; i < 10; i++)
+            {
+                await sendCommand(liftPen);
+            }
+
+
+
+            var commands = GetFirstEigthQuadrant(radius);
+
+
+
+            List<(float, float)> reversedCommands = new List<(float, float)>();
+
+            foreach (var command in commands)
+            {
+                reversedCommands.Insert(0, (-command.Item2, -command.Item1));
+            }
+
+            var firstAndSecondQuadrant = new List<(float, float)>();
+            firstAndSecondQuadrant.AddRange(commands);
+            firstAndSecondQuadrant.AddRange(reversedCommands);
+            firstAndSecondQuadrant = firstAndSecondQuadrant.Select(x => (x.Item2,x.Item1)).ToList();
+
+
+            foreach (var command in firstAndSecondQuadrant)
+            {
+                var commandString = GenerateMovementCommand(true, true, false, command.Item1, command.Item2, 0, FEED_RATE_INPUT);
+                await sendCommand(commandString);
+            }
+
+            var thirdAndFourthQuadrant = new List<(float, float)>();
+
+            thirdAndFourthQuadrant.AddRange(firstAndSecondQuadrant);
+            thirdAndFourthQuadrant.Reverse();
+            thirdAndFourthQuadrant = thirdAndFourthQuadrant.Select(x => (x.Item1, -x.Item2)).ToList();
+
+            foreach (var command in thirdAndFourthQuadrant)
+            {
+                var commandString = GenerateMovementCommand(true, true, false, command.Item1, command.Item2, 0, FEED_RATE_INPUT);
+                await sendCommand(commandString);
+            }
+
+
+            var fifthSixthSeventhEigthQuadrant = new List<(float, float)>();
+            fifthSixthSeventhEigthQuadrant.AddRange(firstAndSecondQuadrant);
+            fifthSixthSeventhEigthQuadrant.AddRange(thirdAndFourthQuadrant);
+            fifthSixthSeventhEigthQuadrant.Reverse();
+            fifthSixthSeventhEigthQuadrant = fifthSixthSeventhEigthQuadrant.Select(x => (-x.Item1, x.Item2)).ToList();
+
+            foreach (var command in fifthSixthSeventhEigthQuadrant)
+            {
+                var commandString = GenerateMovementCommand(true, true, false, command.Item1, command.Item2, 0, FEED_RATE_INPUT);
+                await sendCommand(commandString);
+            }
+
+
+            //await sendCommand("G1 Z1 F500");
+
+            //lower pen
+            var lowerPen = GenerateMovementCommand(false, false, true, 0, 0, DISTANCE_Z, Z_FEED_RATE_INPUT);
+
+            for (int i = 0; i < 10; i++)
+            {
+                await sendCommand(lowerPen);
+            }
+
+        }
+
+
+        private async void DrawAsStar(int radius)
         {
 
             await sendCommand("G21");
@@ -775,7 +888,7 @@ namespace PlotterSoftware
 
         private void CircleButton_OnClick(object sender, EventArgs e)
         {
-            DrawCircle(10);
+            DrawCircle(20);
         }
 
         private static List<string> GetLineGCode(Line line, int stepSize = 1)
@@ -810,7 +923,7 @@ namespace PlotterSoftware
                     err += dy;
                     x0 += sx;
                     xStep = sx;
-                    string command = GenerateMovementCommand(true, false, false, xStep/ 100.0f, 0, 0, FEED_RATE_INPUT);
+                    string command = GenerateMovementCommand(true, false, false, -xStep/ 100.0f, 0, 0, FEED_RATE_INPUT);
                     gCodeCommands.Add(command);
                 }
 
