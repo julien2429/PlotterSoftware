@@ -26,14 +26,18 @@ namespace PlotterSoftware
         private bool _paused = false;
 
 
-        private const float FEED_RATE_INPUT = 100;
-        private const float FEED_RATE_DIAGONAL = 141.421f;
-        private const float Z_FEED_RATE_INPUT = 75;
-        private const float DISTANCE_XY = 0.025F;
-        private const float DISTANCE_XY_DIAGONAL = 0.017F;
-        private const float DISTANCE_Z = 0.025F;
-        private const float CIRCLE_INCREMENT = 0.025F;
-        
+        private static float FEED_RATE_INPUT = 100;
+        private static float FEED_RATE_DIAGONAL = 141.421f;
+        private static float Z_FEED_RATE_INPUT = 75;
+        private static float DISTANCE_XY = 0.025F;
+        private static float DISTANCE_XY_DIAGONAL = 0.017F;
+        private static float DISTANCE_Z = 0.025F;
+        private static float CIRCLE_INCREMENT = 0.025F;
+
+        //private static float raport = 60.0f/ 85.0f;
+        private static float raport = 70.0f / 85.0f;
+
+        private bool isAlertOpen = false;
 
 
         public Form1()
@@ -46,6 +50,15 @@ namespace PlotterSoftware
         private void Form1_Load(object sender, EventArgs e)
         {
             DrawingArea.Paint += new System.Windows.Forms.PaintEventHandler(DrawingArea_Paint);
+
+            textBox2.Text = DISTANCE_XY.ToString();
+            textBox3.Text = DISTANCE_XY_DIAGONAL.ToString();
+            textBox4.Text = DISTANCE_Z.ToString();
+            textBox5.Text = FEED_RATE_INPUT.ToString();
+            textBox6.Text = FEED_RATE_DIAGONAL.ToString();
+            textBox7.Text = Z_FEED_RATE_INPUT.ToString();
+
+
             this.Controls.Add(DrawingArea);
         }
 
@@ -97,8 +110,8 @@ namespace PlotterSoftware
             SerialPort serialPort = new SerialPort();
             serialPort.PortName = PortsSelection.Text;
             serialPort.BaudRate = 115200;
-            serialPort.ReadTimeout = 500;
-            serialPort.WriteTimeout = 500;
+            serialPort.ReadTimeout = 1000;
+            serialPort.WriteTimeout = 1000;
             serialPort.Open();
             _serialPort = serialPort;
 
@@ -160,8 +173,17 @@ namespace PlotterSoftware
                 MessageBox.Show("Please select a file to draw");
                 return;
             }
+            if(fileName.Contains(".gcode") == false)
+            {
+                MessageBox.Show("Please select a valid gcode file");
+                return;
+            }
 
-            FileStream fileStream = File.Open(projectDirectory + $"/{fileName}", FileMode.Open);
+            FileStream fileStream;
+            if (fileName.Contains("\\") == true)
+                fileStream = File.Open(fileName, FileMode.Open);
+            else 
+                fileStream = File.Open(projectDirectory + $"/{fileName}", FileMode.Open);
             StreamReader streamReader = new StreamReader(fileStream);
 
 
@@ -170,33 +192,16 @@ namespace PlotterSoftware
             string s= StringReader.ReadLine();
             fileStream.Close();
 
-            while (s != null && s!="")
+            while (s != null)
             {
                 if(_cancellationToken.IsCancellationRequested)
                 {
                     return;
                 }
               
-
-                if (SerialConsole.InvokeRequired)
-                {
-                    SerialConsole.Invoke(new Action(() => SerialConsole.AppendText("Sending: " + s + "\n")));
-                }
-                else
-                {
-                    SerialConsole.AppendText("Sending: " + s + "\n");
-                }
-                _serialPort.Write(s+"\n");
-                string response = _serialPort.ReadLine();
-
-                if (SerialConsole.InvokeRequired)
-                {
-                    SerialConsole.Invoke(new Action(() => SerialConsole.AppendText("Receiving: " + response + "\n")));
-                }
-                else
-                {
-                    SerialConsole.AppendText("Receiving: " + response + "\n");
-                }
+                await sendCommand(s);
+                
+               
                 s = StringReader.ReadLine();
 
             }
@@ -254,30 +259,55 @@ namespace PlotterSoftware
 
         private Task sendCommand(string message)
         {
-            if (_serialPort == null || !_serialPort.IsOpen)
+            if (_serialPort == null || !_serialPort.IsOpen )
             {
-                MessageBox.Show("Please connect to a port first");
+           
+                var mb = MessageBox.Show("Please connect to a port first");
+
                 return Task.CompletedTask;
             }
             _serialPort.Write(message+ "\n");
             if (SerialConsole.InvokeRequired)
             {
-                SerialConsole.Invoke(new Action(() => SerialConsole.AppendText("Sending: " + message + "\n")));
+                SerialConsole.Invoke(new Action(() =>
+
+                {
+                    SerialConsole.SelectionStart = SerialConsole.Text.Length;
+                    SerialConsole.ScrollToCaret();
+
+                    SerialConsole.AppendText("Sending: " + message + "\n");
+                }));
             }
             else
             {
+                SerialConsole.SelectionStart = SerialConsole.Text.Length;
+                SerialConsole.ScrollToCaret();
                 SerialConsole.AppendText("Sending: " + message + "\n");
             }
-            var response = _serialPort.ReadLine();
+            try
+            {
+                var response = _serialPort.ReadLine();
+            }
+            catch (TimeoutException e)
+            {
+                if (SerialConsole.InvokeRequired)
+                {
+                    SerialConsole.Invoke(new Action(() =>
 
-            if (SerialConsole.InvokeRequired)
-            {
-                SerialConsole.Invoke(new Action(() => SerialConsole.AppendText("Receiving: "  + "\n")));
+                    { SerialConsole.SelectionStart = SerialConsole.Text.Length;
+                        SerialConsole.ScrollToCaret();
+
+                        SerialConsole.AppendText("Timeout: " + e.Message + "\n");
+                    }));
+                }
+                else
+                {
+                    SerialConsole.SelectionStart = SerialConsole.Text.Length;
+                    SerialConsole.ScrollToCaret();
+                    SerialConsole.AppendText("Timeout: " + e.Message + "\n");
+                }
             }
-            else
-            {
-                SerialConsole.AppendText("Receiving: "  + "\n");
-            }
+
             return Task.CompletedTask;
         }
 
@@ -704,14 +734,14 @@ namespace PlotterSoftware
                 {
                     y--;
                     d = d + 4 * (x - y) + 10;
-                    commands.Add((0, -1.0f / 5));
+                    commands.Add((0, -1.0f / 10));
                 }
                 else
                     d = d + 4 * x + 6;
 
               
                 x++;
-                commands.Add((1.0f/5, 0));
+                commands.Add((1.0f / 10 , 0));
 
             }
 
@@ -779,10 +809,11 @@ namespace PlotterSoftware
             firstAndSecondQuadrant.AddRange(reversedCommands);
             firstAndSecondQuadrant = firstAndSecondQuadrant.Select(x => (x.Item2,x.Item1)).ToList();
 
+            
 
             foreach (var command in firstAndSecondQuadrant)
             {
-                var commandString = GenerateMovementCommand(true, true, false, command.Item1, command.Item2, 0, FEED_RATE_INPUT);
+                var commandString = GenerateMovementCommand(true, true, false, command.Item1 * raport, command.Item2, 0, FEED_RATE_INPUT);
                 await sendCommand(commandString);
             }
 
@@ -794,7 +825,7 @@ namespace PlotterSoftware
 
             foreach (var command in thirdAndFourthQuadrant)
             {
-                var commandString = GenerateMovementCommand(true, true, false, command.Item1, command.Item2, 0, FEED_RATE_INPUT);
+                var commandString = GenerateMovementCommand(true, true, false, command.Item1 * raport, command.Item2, 0, FEED_RATE_INPUT);
                 await sendCommand(commandString);
             }
 
@@ -807,7 +838,7 @@ namespace PlotterSoftware
 
             foreach (var command in fifthSixthSeventhEigthQuadrant)
             {
-                var commandString = GenerateMovementCommand(true, true, false, command.Item1, command.Item2, 0, FEED_RATE_INPUT);
+                var commandString = GenerateMovementCommand(true, true, false, command.Item1 * raport, command.Item2, 0, FEED_RATE_INPUT);
                 await sendCommand(commandString);
             }
 
@@ -825,7 +856,7 @@ namespace PlotterSoftware
         }
 
 
-        private async void DrawAsStar(int radius)
+        private async void DrawStar(int radius)
         {
 
             await sendCommand("G21");
@@ -888,7 +919,75 @@ namespace PlotterSoftware
 
         private void CircleButton_OnClick(object sender, EventArgs e)
         {
-            DrawCircle(20);
+            int size = 20;
+            if(Int32.TryParse(textBox1.Text,out size))
+                DrawCircle(size);
+            else
+                DrawCircle(20);
+        }
+
+        private void StarButton_Click(object sender, EventArgs e)
+        {
+            int size = 20;
+            if (Int32.TryParse(textBox1.Text, out size))
+                DrawStar(size);
+            else
+                DrawStar(20);
+        }
+
+        private void FileDialog_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog fileDialog = new OpenFileDialog();
+            fileDialog.Filter = "Gcode files (*.gcode)|*.gcode";
+            fileDialog.Title = "Select a Gcode file";
+            if (fileDialog.ShowDialog() == DialogResult.OK)
+            {
+                string fileName = fileDialog.FileName;
+                FileToDraw.Text = fileName;
+            }
+
+            
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+
+            float xy_diag = textBox2.Text == "" ? 0 : float.Parse(textBox3.Text);
+            float xy = textBox3.Text == "" ? 0 : float.Parse(textBox2.Text);
+            float z = textBox4.Text == "" ? 0 : float.Parse(textBox4.Text);
+            float feed_rate_input = textBox5.Text == "" ? 0 : float.Parse(textBox5.Text);
+            float feed_rate_diag = textBox6.Text == "" ? 0 : float.Parse(textBox6.Text);
+            float z_feed_rate_input = textBox7.Text == "" ? 0 : float.Parse(textBox7.Text);
+
+            if (xy_diag != 0)
+                DISTANCE_XY_DIAGONAL = xy_diag;
+            if (xy != 0)
+                DISTANCE_XY = xy;
+            if (z != 0)
+                DISTANCE_Z = z;
+            if (feed_rate_input != 0)
+                FEED_RATE_INPUT = feed_rate_input;
+            if (feed_rate_diag != 0)
+                FEED_RATE_DIAGONAL = feed_rate_diag;
+            if (z_feed_rate_input != 0)
+                Z_FEED_RATE_INPUT = z_feed_rate_input;
+
+
+        }
+
+        private void label1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void label3_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void label7_Click(object sender, EventArgs e)
+        {
+
         }
 
         private static List<string> GetLineGCode(Line line, int stepSize = 1)
