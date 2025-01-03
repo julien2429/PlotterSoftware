@@ -721,12 +721,9 @@ namespace PlotterSoftware
 
         private List< (float, float) > GetFirstEigthQuadrant(int r)
         {
-
             int x = 0, y = r;
             int d = 3 - 2 * r;
-
             List<(float, float)> commands =  new List<(float, float)>();
-
             while (y >= x)
             {
 
@@ -734,46 +731,15 @@ namespace PlotterSoftware
                 {
                     y--;
                     d = d + 4 * (x - y) + 10;
-                    commands.Add((0, -1.0f / 10));
+                    commands.Add((0, -1.0f / 5));
                 }
                 else
                     d = d + 4 * x + 6;
-
-              
                 x++;
-                commands.Add((1.0f / 10 , 0));
+                commands.Add((1.0f / 5 , 0));
 
-            }
-
-
-                /*while (x > y)
-                {
-                    y++;
-                    float y_val = 1.0f;
-                    float x_val = 0.0f;
-
-                    if(P <= 0)
-                    {
-                        P = P + 2 * y + 1;
-                    }
-                    else
-                    {
-                        x--;
-                        x_val = -1;
-                        P = P + 2 * y - 2 * x + 1;
-                    }
-
-                    if (x < y)
-                        break;
-                    commands.Add((0, y_val / 5));
-                    commands.Add((x_val / 5, 0));
-                    // commands.Add((x_val / 5.0f, y_val / 5.0f));
-
-                }*/
-
-                return commands;    
-
-
+            } 
+            return commands;    
         }
 
         private async void DrawCircle(int radius)
@@ -868,8 +834,8 @@ namespace PlotterSoftware
 
             foreach (var command in commands)
             {
-                
-                var commandString = GenerateMovementCommand(true, true, false, command.Item1, command.Item2, 0, FEED_RATE_INPUT);
+
+                var commandString = GenerateMovementCommand(true, true, false, command.Item1 * raport, command.Item2, 0, FEED_RATE_INPUT);
                 await sendCommand(commandString);
             }
 
@@ -882,7 +848,7 @@ namespace PlotterSoftware
 
             foreach (var command in reversedCommands)
             {
-                var commandString = GenerateMovementCommand(true, true, false, command.Item1, command.Item2, 0, FEED_RATE_INPUT);
+                var commandString = GenerateMovementCommand(true, true, false, command.Item1 * raport, command.Item2, 0, FEED_RATE_INPUT);
                 await sendCommand(commandString);
             }
 
@@ -894,7 +860,7 @@ namespace PlotterSoftware
 
             foreach (var command in thirdAndFourthQuadrant)
             {
-                var commandString = GenerateMovementCommand(true, true, false, command.Item1, command.Item2, 0, FEED_RATE_INPUT);
+                var commandString = GenerateMovementCommand(true, true, false, command.Item1 * raport, command.Item2, 0, FEED_RATE_INPUT);
                 await sendCommand(commandString);
             }
 
@@ -908,7 +874,7 @@ namespace PlotterSoftware
 
             foreach (var command in fifthSixthSeventhEigthQuadrant)
             {
-                var commandString = GenerateMovementCommand(true, true, false, command.Item1, command.Item2, 0, FEED_RATE_INPUT);
+                var commandString = GenerateMovementCommand(true, true, false, command.Item1 * raport, command.Item2, 0, FEED_RATE_INPUT);
                 await sendCommand(commandString);
             }
 
@@ -993,25 +959,17 @@ namespace PlotterSoftware
         private static List<string> GetLineGCode(Line line, int stepSize = 1)
         {
             List<string> gCodeCommands = new List<string>();
-
-
             float x1 = line.Start.X * 10;
             float y1 = line.Start.Y * 10;
             float x0 = line.End.X * 10;
             float y0 = line.End.Y * 10;
-
             float dx = Math.Abs(x1 - x0);
             float dy = -Math.Abs(y1 - y0);
-
             int sx = x0 < x1 ? 1 : -1;
             int sy = y0 < y1 ? 1 : -1;
-
             float err = dx + dy;
 
             
-           
-
-
             while (x0 != x1 || y0 != y1)
             {
                 float e2 = 2 * err;
@@ -1025,7 +983,6 @@ namespace PlotterSoftware
                     string command = GenerateMovementCommand(true, false, false, -xStep/ 100.0f, 0, 0, FEED_RATE_INPUT);
                     gCodeCommands.Add(command);
                 }
-
                 if (e2 <= dx)
                 {
                     err += dx;
@@ -1034,8 +991,6 @@ namespace PlotterSoftware
                     string command = GenerateMovementCommand(false, true, false, 0, yStep / 100.0f, 0, FEED_RATE_INPUT);
                     gCodeCommands.Add(command);
                 }
-
-                
             }
 
             return gCodeCommands;
